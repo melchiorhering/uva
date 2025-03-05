@@ -1,0 +1,19 @@
+[project]
+name = "uva"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "leafmap>=0.42.12",
+    "pandas>=2.2.3",
+    "plotly>=6.0.0",
+    "pydeck>=0.9.1",
+    "streamlit>=1.43.0",
+    "watchdog>=6.0.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "ruff>=0.9.9",
+]

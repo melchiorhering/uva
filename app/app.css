@@ -1,0 +1,115 @@
+/* Original styles */
+.notification-item {
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 5px;
+  background-color: #f0f2f6;
+  border-left: 4px solid #4e8df5;
+}
+.notification-time {
+  color: #666;
+  font-size: 0.8em;
+}
+.notification-resolved {
+  border-left-color: #4caf50;
+}
+.notification-pending {
+  border-left-color: #ff9800;
+}
+.notification-new {
+  border-left-color: #f44336;
+}
+.dashboard-title {
+  text-align: center;
+  font-size: 2em;
+  margin-bottom: 20px;
+  color: #1e3c5c;
+}
+.metric-container {
+  background-color: #f7f7f7;
+  padding: 15px;
+  border-radius: 10px;
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+.chart-container {
+  background-color: white;
+  padding: 10px;
+  border-radius: 5px;
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.05);
+  margin-bottom: 15px;
+}
+.container-open {
+  color: #4caf50;
+  font-weight: bold;
+}
+.container-closed {
+  color: #f44336;
+  font-weight: bold;
+}
+.amsterdam-accent {
+  color: #ec0000;
+}
+
+/* New key-based styles */
+/* Metric containers */
+.st-key-metric-container {
+  background-color: #f7f7f7;
+  padding: 15px;
+  border-radius: 10px;
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* Chart containers */
+.st-key-chart-container {
+  background-color: white;
+  padding: 10px;
+  border-radius: 5px;
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.05);
+  margin-bottom: 15px;
+}
+
+/* Buttons */
+.st-key-export-button button {
+  background-color: #1e88e5;
+  color: white;
+}
+
+.st-key-empty-button button {
+  background-color: #f44336;
+  color: white;
+}
+
+.st-key-refresh-button button {
+  background-color: #4caf50;
+  color: white;
+}
+
+.st-key-submit-button button {
+  background-color: #ff9800;
+  color: white;
+  width: 100%;
+}
+
+/* Dashboard title */
+.st-key-dashboard-title div.element-container div.markdown-text-container p {
+  text-align: center;
+  font-size: 2em;
+  margin-bottom: 20px;
+  color: #1e3c5c;
+}
+
+.st-key-dashboard-title span.amsterdam-accent {
+  color: #ec0000;
+}
+
+/* Map controls */
+.st-key-radio-selector {
+  margin: 10px 0;
+}
+
+/* Tables */
+.st-key-container-table div.stDataFrame {
+  border-radius: 10px;
+  overflow: hidden;
+}
