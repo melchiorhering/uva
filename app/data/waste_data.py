@@ -3,6 +3,7 @@ import numpy as np
 import random
 from datetime import datetime, timedelta
 import streamlit as st
+import requests
 
 # Amsterdam data constants
 NEIGHBORHOODS = [
@@ -48,6 +49,41 @@ COMPLAINT_TYPES = [
 # Amsterdam center coordinates
 AMSTERDAM_CENTER = (52.3676, 4.9041)
 
+# URL for the Amsterdam Waste Container GeoJSON data
+GEOJSON_URL = "https://map.data.amsterdam.nl/maps/afval?request=getfeature&service=wfs&version=1.1.0&typename=container_coordinaten&outputformat=geojson"
+
+def fetch_container_data():
+    """Fetch Amsterdam waste container data and convert it to DataFrame"""
+    try:
+        response = requests.get(GEOJSON_URL)
+        response.raise_for_status()  # Raise error for bad responses
+        geojson_data = response.json()
+
+        return parse_geojson(geojson_data)
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching data: {e}")
+        return pd.DataFrame()  # Return empty DataFrame on failure
+
+def parse_geojson(geojson_data):
+    """Extract relevant fields from GeoJSON"""
+    containers = []
+    
+    for feature in geojson_data["features"]:
+        props = feature["properties"]
+        coords = feature["geometry"]["coordinates"]
+
+        containers.append({
+            "id": props.get("id", "Unknown"),
+            "neighborhood": props.get("eigenaar_naam", "Unknown"),
+            "lat": coords[1],  # Ensure correct order (lat, lon)
+            "lon": coords[0],
+            "type": props.get("container_kleur", "Unknown"),
+            "waste_category": props.get("fracte_omschrijving", "General Waste"),
+            "status": "Open" if props.get("container_opmerking", "").lower() == "open" else "Closed",
+        })
+
+    return pd.DataFrame(containers)
 
 @st.cache_data
 def generate_amsterdam_waste_data():
