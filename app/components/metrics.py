@@ -9,8 +9,8 @@ def render_top_metrics(container_df, collection_df, complaints_df):
     with top_metrics[0]:
         render_container_metric(container_df)
 
-    with top_metrics[1]:
-        render_waste_metric(collection_df)
+    # with top_metrics[1]:
+    #     render_waste_metric(collection_df)
 
     with top_metrics[2]:
         render_smart_bin_metric(container_df)

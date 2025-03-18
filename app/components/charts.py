@@ -16,21 +16,6 @@ def render_waste_category_pie(waste_by_category):
     st.plotly_chart(fig, use_container_width=True)
 
 
-def render_waste_trend_chart(daily_collection):
-    """Render line chart showing waste collection trends"""
-    st.subheader("Waste Collection Trends")
-    fig = px.line(
-        daily_collection,
-        x="date",
-        y="amount_kg",
-        color="waste_category",
-        line_shape="spline",
-        color_discrete_sequence=px.colors.qualitative.Bold,
-    )
-    fig.update_layout(margin=dict(l=20, r=20, t=30, b=20), height=250)
-    st.plotly_chart(fig, use_container_width=True)
-
-
 def render_neighborhood_containers_chart(neighborhood_df):
     """Render bar chart showing containers by neighborhood"""
     st.subheader("Containers by Neighborhood")

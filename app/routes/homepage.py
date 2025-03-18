@@ -1,13 +1,18 @@
 import streamlit as st
 
 from utils.helpers import load_css
-from data.waste_data import generate_amsterdam_waste_data, get_waste_trend_data
+from data.waste_data import (
+    generate_amsterdam_waste_data,
+    fetch_and_save_container_data,
+    load_container_data,
+)
 from components.metrics import render_top_metrics
 from components.charts import (
     render_waste_category_pie,
-    render_waste_trend_chart,
     render_neighborhood_containers_chart,
 )
+
+
 from components.map import render_map_container, render_map_controls
 from components.tables import render_container_table, render_complaints_section
 
@@ -36,17 +41,12 @@ def main():
     render_top_metrics(container_df, collection_df, complaints_df)
 
     # --- Top Row Charts ---
-    top_row = st.columns([1, 1, 1])
+    top_row = st.columns([1, 2])
 
     with top_row[0]:
         render_waste_category_pie(waste_by_category)
 
     with top_row[1]:
-        # Prepare data for waste trend chart
-        daily_collection = get_waste_trend_data(collection_df, days=10)
-        render_waste_trend_chart(daily_collection)
-
-    with top_row[2]:
         render_neighborhood_containers_chart(neighborhood_df)
 
     # --- Middle Section - Map and Controls ---
@@ -54,6 +54,13 @@ def main():
 
     # First handle the controls to get the current selection
     with middle_row[1]:
+        st.session_state.container_df = load_container_data()
+
+        # If local data doesn't exist or is empty, try to fetch it
+        if st.session_state.container_df.empty:
+            with st.spinner("Loading container data..."):
+                st.session_state.container_df = fetch_and_save_container_data()
+
         # Render map controls and get user selections
         map_type, selected_waste_category, selected_neighborhood = render_map_controls(
             container_df

@@ -9,9 +9,7 @@ navigation = st.navigation(
             icon=":material/delete:",
             default=True,
         ),
-        st.Page(
-            "routes/statistics.py", title="Second page", icon=":material/favorite:"
-        ),
+        # st.Page("routes/map.py", title="Map", icon=":material/favorite:"),
     ]
 )
 navigation.run()

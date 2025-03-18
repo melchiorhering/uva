@@ -3,6 +3,9 @@ import numpy as np
 import random
 from datetime import datetime, timedelta
 import streamlit as st
+import requests
+import json
+import os
 
 # Amsterdam data constants
 NEIGHBORHOODS = [
@@ -47,6 +50,185 @@ COMPLAINT_TYPES = [
 
 # Amsterdam center coordinates
 AMSTERDAM_CENTER = (52.3676, 4.9041)
+
+# URL for the Amsterdam Waste Container GeoJSON data
+GEOJSON_URL = "https://map.data.amsterdam.nl/maps/afval?request=getfeature&service=wfs&version=1.1.0&typename=container_coordinaten&outputformat=geojson"
+
+# Define the path where the GeoJSON data will be stored
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data_cache")
+GEOJSON_DATA_PATH = os.path.join(DATA_DIR, "amsterdam_containers.json")
+PROCESSED_DATA_PATH = os.path.join(DATA_DIR, "processed_containers.csv")
+
+
+def ensure_data_dir_exists():
+    """Ensure the data directory exists"""
+    if not os.path.exists(DATA_DIR):
+        os.makedirs(DATA_DIR)
+
+
+def fetch_and_save_container_data(force_refresh=False):
+    """Fetch GeoJSON data from API, process it, and save locally
+
+    Parameters:
+    force_refresh (bool): If True, fetch from API even if local files exist
+
+    Returns:
+    DataFrame: Processed container data
+    """
+    # Ensure data directory exists
+    ensure_data_dir_exists()
+
+    # Check if we need to fetch data
+    need_to_fetch = force_refresh or not os.path.exists(PROCESSED_DATA_PATH)
+
+    if need_to_fetch:
+        st.info("Fetching container data from Amsterdam API...")
+        try:
+            response = requests.get(GEOJSON_URL)
+            response.raise_for_status()  # Raise error for bad responses
+            geojson_data = response.json()
+
+            # Save raw GeoJSON
+            with open(GEOJSON_DATA_PATH, "w") as f:
+                json.dump(geojson_data, f)
+
+            # Process and save as CSV for faster loading
+            df = parse_geojson(geojson_data)
+            df.to_csv(PROCESSED_DATA_PATH, index=False)
+
+            st.success("Data successfully fetched and saved.")
+            return df
+
+        except requests.exceptions.RequestException as e:
+            st.error(f"Error fetching data: {e}")
+            # Try to load existing data if available
+            if os.path.exists(PROCESSED_DATA_PATH):
+                st.warning("Using previously cached data instead.")
+                return load_container_data()
+            return pd.DataFrame()  # Return empty DataFrame on failure
+    else:
+        # Data exists locally, just load it
+        return load_container_data()
+
+
+def load_container_data():
+    """Load container data from local storage
+
+    Returns:
+    DataFrame: Processed container data
+    """
+    try:
+        if os.path.exists(PROCESSED_DATA_PATH):
+            df = pd.read_csv(PROCESSED_DATA_PATH)
+            return df
+        else:
+            st.warning("No local data found. Please fetch data first.")
+            return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        return pd.DataFrame()
+
+
+def fetch_container_data():
+    """Fetch Amsterdam waste container data and convert it to DataFrame
+    (Legacy function - now tries to load local data first, then fetches if needed)
+    """
+    # Try to load local data first
+    df = load_container_data()
+
+    # If no local data, fetch from API
+    if df.empty:
+        try:
+            response = requests.get(GEOJSON_URL)
+            response.raise_for_status()  # Raise error for bad responses
+            geojson_data = response.json()
+
+            return parse_geojson(geojson_data)
+
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching data: {e}")
+            return pd.DataFrame()  # Return empty DataFrame on failure
+
+    return df
+
+
+def parse_geojson(geojson_data):
+    """Extract relevant fields from GeoJSON and augment with mock data where needed"""
+    containers = []
+
+    # Map common container types from Amsterdam data
+    container_type_mapping = {
+        "Restafval": "General Waste",
+        "Papier": "Paper/Carton",
+        "Glas": "Glass",
+        "Plastic": "Plastic",
+        "GFT": "Organic",
+        "Textiel": "Textiles",
+    }
+
+    # Create map of container types to determine visualization colors
+    container_colors = {
+        "Ondergrondse container": "Underground Container",
+        "Mini container": "Mini Container",
+        "Verzamelcontainer": "Collection Container",
+        "Container": "Standard Container",
+    }
+
+    for feature in geojson_data["features"]:
+        props = feature["properties"]
+        coords = feature["geometry"]["coordinates"]
+
+        # Get waste type from Amsterdam data or default
+        waste_category = props.get("fractie_omschrijving", "Unknown")
+        if waste_category in container_type_mapping:
+            waste_category = container_type_mapping[waste_category]
+
+        # Determine container type
+        container_type = props.get("type_name", "Unknown")
+        if container_type in container_colors:
+            container_type = container_colors[container_type]
+
+        # Container ID - use actual ID or generate one
+        container_id = props.get("id", f"AMS-{len(containers):04d}")
+
+        # Generate mock data for fields not in the API
+        fill_level = random.randint(30, 95)
+        status = "Open" if random.random() > 0.3 else "Closed"
+        days_ago = random.randint(0, 14)
+        last_emptied = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
+
+        # Get neighborhood or district information
+        neighborhood = props.get("eigenaar_naam", "Unknown")
+        if neighborhood == "Unknown":
+            # Try alternate fields
+            neighborhood = props.get("stadsdeel", props.get("buurt", "Amsterdam"))
+
+        # Determine capacity based on container type
+        capacity_kg = 500  # default
+        if (
+            "ondergronds" in str(container_type).lower()
+            or "underground" in str(container_type).lower()
+        ):
+            capacity_kg = 800
+        elif "mini" in str(container_type).lower():
+            capacity_kg = 200
+
+        containers.append(
+            {
+                "id": container_id,
+                "neighborhood": neighborhood,
+                "lat": coords[1],  # Ensure correct order (lat, lon)
+                "lon": coords[0],
+                "type": container_type,
+                "waste_category": waste_category,
+                "fill_level": fill_level,
+                "status": status,
+                "last_emptied": last_emptied,
+                "capacity_kg": capacity_kg,
+            }
+        )
+
+    return pd.DataFrame(containers)
 
 
 @st.cache_data
@@ -268,3 +450,30 @@ def get_waste_trend_data(collection_df, days=10):
         daily_collection["date"]
         >= daily_collection["date"].max() - pd.Timedelta(days=days)
     ]
+
+
+# Add support for getting container type colors
+def get_container_type_colors():
+    """Return mapping of container types to colors"""
+    return {
+        "Underground Container": [50, 50, 150],
+        "Mini Container": [150, 50, 50],
+        "Collection Container": [50, 150, 50],
+        "Standard Container": [150, 150, 50],
+        "Smart Bin": [150, 50, 150],
+        "Unknown": [100, 100, 100],
+    }
+
+
+def get_waste_type_colors():
+    """Return mapping of waste types to colors"""
+    return {
+        "Recycling": [46, 139, 87],
+        "General Waste": [128, 128, 128],
+        "Paper/Carton": [70, 130, 180],
+        "Glass": [0, 128, 128],
+        "Organic": [139, 69, 19],
+        "Plastic": [255, 165, 0],
+        "Textiles": [218, 112, 214],
+        "Unknown": [200, 200, 200],
+    }
