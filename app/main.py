@@ -12,4 +12,5 @@ navigation = st.navigation(
         # st.Page("routes/map.py", title="Map", icon=":material/favorite:"),
     ]
 )
+
 navigation.run()
