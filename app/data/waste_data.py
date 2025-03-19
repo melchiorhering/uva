@@ -174,6 +174,15 @@ def parse_geojson(geojson_data):
         "Container": "Standard Container",
     }
 
+    # Define neighborhoods with "recently emptied" containers (lower fill levels)
+    recently_emptied = ["Oost", "Nieuw-West", "IJburg", "Weesp"]
+
+    # Define neighborhoods with higher fill levels (needing attention soon)
+    needs_attention = ["Centrum", "De Pijp", "Zuid", "Jordaan"]
+
+    # Track containers by neighborhood for consistent fill patterns
+    neighborhood_fill_patterns = {}
+
     for feature in geojson_data["features"]:
         props = feature["properties"]
         coords = feature["geometry"]["coordinates"]
@@ -191,17 +200,57 @@ def parse_geojson(geojson_data):
         # Container ID - use actual ID or generate one
         container_id = props.get("id", f"AMS-{len(containers):04d}")
 
-        # Generate mock data for fields not in the API
-        fill_level = random.randint(30, 95)
-        status = "Open" if random.random() > 0.3 else "Closed"
-        days_ago = random.randint(0, 14)
-        last_emptied = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
-
         # Get neighborhood or district information
         neighborhood = props.get("eigenaar_naam", "Unknown")
         if neighborhood == "Unknown":
             # Try alternate fields
             neighborhood = props.get("stadsdeel", props.get("buurt", "Amsterdam"))
+
+        # Generate realistic fill levels based on neighborhood patterns
+        if neighborhood not in neighborhood_fill_patterns:
+            # Create a new base fill pattern for this neighborhood
+            if neighborhood in recently_emptied:
+                # Recently emptied neighborhoods have lower fill levels
+                base_fill = random.randint(10, 40)
+            elif neighborhood in needs_attention:
+                # High demand areas have higher fill levels
+                base_fill = random.randint(60, 85)
+            else:
+                # Other neighborhoods have moderate fill levels
+                base_fill = random.randint(30, 60)
+
+            # Add some random variation but keep neighborhood consistency
+            variation = random.randint(5, 15)
+            neighborhood_fill_patterns[neighborhood] = {
+                "base_fill": base_fill,
+                "variation": variation,
+            }
+
+        # Get the pattern for this neighborhood
+        pattern = neighborhood_fill_patterns[neighborhood]
+
+        # Calculate fill level with variation but keep neighborhood pattern
+        fill_level = max(
+            5,
+            min(
+                95,
+                pattern["base_fill"]
+                + random.randint(-pattern["variation"], pattern["variation"]),
+            ),
+        )
+
+        # Adjust for waste type (organic tends to fill faster, glass slower)
+        if waste_category == "Organic":
+            fill_level = min(95, fill_level + random.randint(5, 15))
+        elif waste_category == "Glass":
+            fill_level = max(5, fill_level - random.randint(5, 15))
+
+        # Status based on fill level
+        status = "Open" if fill_level < 80 or random.random() > 0.7 else "Closed"
+
+        # Last emptied date correlates with fill level
+        days_ago = int((fill_level / 100) * 14)  # 0% = just emptied, 100% = 14 days
+        last_emptied = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
 
         # Determine capacity based on container type
         capacity_kg = 500  # default
@@ -272,7 +321,7 @@ def _generate_container_data():
     containers = []
     for neighborhood in NEIGHBORHOODS:
         # Number of containers in this neighborhood
-        n_containers = random.randint(5, 20)
+        n_containers = random.randint(5, 100)
 
         # Base coordinates with offsets for different neighborhoods
         base_lat = AMSTERDAM_CENTER[0] + random.uniform(-0.05, 0.05)

@@ -1,5 +1,8 @@
 import streamlit as st
 import pydeck as pdk
+import pandas as pd
+import random
+from datetime import datetime
 from data.waste_data import (
     load_container_data,
     fetch_and_save_container_data,
@@ -54,14 +57,24 @@ def render_map_container(
     )
 
     # Create layers based on selection
-    layers = create_map_layers(filtered_df, map_type)
+    if map_type == "open_bins":
+        # Generate mock data for open waste bins
+        open_bins_df = generate_mock_open_bins(selected_neighborhood)
+        layers = create_map_layers(open_bins_df, map_type)
+        # Use the open bins dataframe for display and metrics
+        display_df = open_bins_df
+    else:
+        layers = create_map_layers(filtered_df, map_type)
+        display_df = filtered_df
 
     # Create and display the map
     r = pdk.Deck(
         layers=layers,
         initial_view_state=view_state,
         tooltip={
-            "text": "{id}\nType: {type}\nWaste: {waste_category}\nFill: {fill_level}%\nStatus: {status}"
+            "text": "{id}\nType: {bin_type}\nWaste: {waste_category}\nFill: {fill_level}%\nStatus: {status}\nCapacity: {capacity_liters} liters\nLast emptied: {last_emptied}"
+            if map_type == "open_bins"
+            else "{id}\nType: {type}\nWaste: {waste_category}\nFill: {fill_level}%\nStatus: {status}"
         },
     )
 
@@ -74,11 +87,235 @@ def render_map_container(
         render_waste_type_legend(filtered_df, map_container)
     elif map_type == "container_types":
         render_container_type_legend(filtered_df, map_container)
-    elif map_type == "fill_level":
+    elif map_type == "fill_level" or map_type == "critical_containers":
         render_fill_level_legend(map_container)
+    elif map_type == "open_bins":
+        render_open_bins_legend(map_container)
 
     # Return the filtered dataframe for use in other components
-    return filtered_df
+    return display_df
+
+
+def generate_mock_open_bins(selected_neighborhood):
+    """Generate mock data for smaller open waste bins around Amsterdam with realistic distribution"""
+    # Amsterdam center coordinates
+    center_lat, center_lon = 52.3676, 4.9041
+
+    # Dictionary of Amsterdam neighborhoods with approximate centers
+    neighborhoods = {
+        "Centrum": (52.3700, 4.9000),
+        "Noord": (52.3900, 4.9200),
+        "West": (52.3750, 4.8700),
+        "Nieuw-West": (52.3600, 4.8000),
+        "Zuid": (52.3400, 4.8800),
+        "Oost": (52.3600, 4.9400),
+        "Zuidoost": (52.3100, 4.9700),
+        "Westpoort": (52.4100, 4.8300),
+        "Weesp": (52.3050, 5.0430),
+        "IJburg": (52.3500, 5.0000),
+        "De Pijp": (52.3550, 4.8950),
+        "Jordaan": (52.3700, 4.8850),
+        "Oud-West": (52.3650, 4.8750),
+        "Bos en Lommer": (52.3800, 4.8530),
+        "Oud-Zuid": (52.3500, 4.8800),
+    }
+
+    # Define hotspot and coldspot areas (tourist vs residential)y
+    hotspots = {
+        "Centrum": {"weight": 0.85, "bins_factor": 2.5},  # Tourist center - many bins
+        "De Pijp": {"weight": 0.75, "bins_factor": 2.0},  # Popular area with many cafes
+        "Jordaan": {"weight": 0.70, "bins_factor": 1.8},  # Tourist/shopping area
+        "Zuid": {"weight": 0.65, "bins_factor": 1.5},  # Business district
+        "Oud-West": {"weight": 0.65, "bins_factor": 1.5},  # Popular residential area
+    }
+
+    coldspots = {
+        "Noord": {"weight": 0.3, "bins_factor": 0.7},  # Less dense residential area
+        "Nieuw-West": {"weight": 0.4, "bins_factor": 0.6},  # More suburban
+        "Zuidoost": {"weight": 0.3, "bins_factor": 0.5},  # Less dense
+        "Westpoort": {"weight": 0.2, "bins_factor": 0.4},  # Industrial area
+        "Weesp": {"weight": 0.25, "bins_factor": 0.3},  # Far from center
+    }
+
+    # Generate more bins across Amsterdam (60-120)
+    num_bins = random.randint(60, 120)
+
+    # If specific neighborhood is selected, generate more bins there
+    if (
+        selected_neighborhood != "All Neighborhoods"
+        and selected_neighborhood in neighborhoods
+    ):
+        if selected_neighborhood in hotspots:
+            factor = hotspots[selected_neighborhood]["bins_factor"]
+        elif selected_neighborhood in coldspots:
+            factor = (
+                coldspots[selected_neighborhood]["bins_factor"] * 2
+            )  # Boost selected coldspots
+        else:
+            factor = 1.5
+        num_bins = int(num_bins * factor)
+
+    bins = []
+
+    # Different bin types with realistic distribution
+    bin_types = ["Standard", "Recycling", "Cigarette", "Solar Compactor"]
+
+    # Adjust weights based on urban realities - standard bins most common,
+    # solar compactors rare and mostly in high-traffic areas
+    base_weights = {
+        "Standard": 0.65,
+        "Recycling": 0.20,
+        "Cigarette": 0.10,
+        "Solar Compactor": 0.05,
+    }
+
+    # Generate bins with realistic geographic distribution
+    for _ in range(num_bins):
+        if (
+            selected_neighborhood != "All Neighborhoods"
+            and selected_neighborhood in neighborhoods
+        ):
+            # Generate bins in the selected neighborhood
+            center = neighborhoods[selected_neighborhood]
+            # Smaller spread for specific neighborhood
+            lat = center[0] + random.uniform(-0.015, 0.015)
+            lon = center[1] + random.uniform(-0.015, 0.015)
+            neighborhood = selected_neighborhood
+
+            # Adjust bin type weights for this specific neighborhood
+            bin_type_weights = list(base_weights.values())
+        else:
+            # Distribute bins with higher concentration in hotspots
+            if random.random() < 0.85:  # 85% in defined neighborhoods
+                # Weight neighborhood selection by hotspot/coldspot factors
+                hood_weights = []
+                hood_names = []
+
+                for hood, data in hotspots.items():
+                    hood_weights.append(data["weight"])
+                    hood_names.append(hood)
+
+                for hood, data in coldspots.items():
+                    hood_weights.append(data["weight"])
+                    hood_names.append(hood)
+
+                for hood in neighborhoods.keys():
+                    if hood not in hotspots and hood not in coldspots:
+                        hood_weights.append(0.5)  # Default weight
+                        hood_names.append(hood)
+
+                # Normalize weights
+                total_weight = sum(hood_weights)
+                hood_weights = [w / total_weight for w in hood_weights]
+
+                # Select neighborhood based on weights
+                neighborhood = random.choices(hood_names, weights=hood_weights, k=1)[0]
+                center = neighborhoods[neighborhood]
+
+                # Add some geographic clustering - bins tend to be placed near each other
+                cluster_size = random.randint(1, 4)  # 1-4 bins in a cluster
+                if len(bins) > 0 and random.random() < 0.4 and cluster_size > 1:
+                    # 40% chance to create a cluster by using a nearby bin's location
+                    recent_bins = bins[-10:]  # Look at the 10 most recently added bins
+                    if recent_bins and neighborhood == recent_bins[-1]["neighborhood"]:
+                        # Cluster around a recent bin in the same neighborhood
+                        base_lat = recent_bins[-1]["lat"]
+                        base_lon = recent_bins[-1]["lon"]
+                        # Small spread within cluster
+                        lat = base_lat + random.uniform(-0.002, 0.002)
+                        lon = base_lon + random.uniform(-0.002, 0.002)
+                    else:
+                        # Add some randomness within neighborhood
+                        spread = 0.008 if neighborhood in hotspots else 0.015
+                        lat = center[0] + random.uniform(-spread, spread)
+                        lon = center[1] + random.uniform(-spread, spread)
+                else:
+                    # Add some randomness within neighborhood
+                    spread = 0.008 if neighborhood in hotspots else 0.015
+                    lat = center[0] + random.uniform(-spread, spread)
+                    lon = center[1] + random.uniform(-spread, spread)
+
+                # Adjust bin type weights based on neighborhood type
+                if neighborhood in hotspots:
+                    # More recycling and solar compactors in hotspots
+                    bin_type_weights = [0.55, 0.25, 0.10, 0.10]
+                elif neighborhood in coldspots:
+                    # Mostly standard bins in coldspots, rarely solar compactors
+                    bin_type_weights = [0.75, 0.15, 0.08, 0.02]
+                else:
+                    # Default weights
+                    bin_type_weights = list(base_weights.values())
+            else:
+                # Some bins spread around generally
+                lat = center_lat + random.uniform(-0.05, 0.05)
+                lon = center_lon + random.uniform(-0.05, 0.05)
+                neighborhood = "Other area"
+                bin_type_weights = list(base_weights.values())
+
+        # Generate bin data with more variation
+        bin_type = random.choices(bin_types, weights=bin_type_weights, k=1)[0]
+
+        # Capacity varies by bin type
+        if bin_type == "Solar Compactor":
+            capacity = random.randint(120, 180)  # liters - larger capacity
+        elif bin_type == "Recycling":
+            capacity = random.randint(60, 120)  # liters
+        elif bin_type == "Cigarette":
+            capacity = random.randint(10, 30)  # liters - small
+        else:
+            capacity = random.randint(40, 90)  # liters
+
+        # Fill level - create realistic distribution with geographic patterns
+        # Base fill level varies by neighborhood type
+        if neighborhood in hotspots:
+            base_fill_level = random.randint(30, 60)  # Busier areas have more waste
+        elif neighborhood in coldspots:
+            base_fill_level = random.randint(10, 40)  # Less busy areas have less waste
+        else:
+            base_fill_level = random.randint(15, 50)  # Medium waste levels
+
+        # Add bin type factor - some bin types fill faster
+        type_factor = 0
+        if bin_type == "Standard":
+            type_factor = random.randint(5, 15)
+        elif bin_type == "Recycling":
+            type_factor = random.randint(0, 10)
+        elif bin_type == "Solar Compactor":
+            type_factor = random.randint(-10, 0)  # Compactors stay emptier longer
+        elif bin_type == "Cigarette":
+            type_factor = random.randint(15, 30)  # Cigarette bins fill quickly
+
+        # Day of week effect - bins are typically emptier on Monday (assume day 0)
+        day_of_week = datetime.now().weekday()
+        day_factor = min(day_of_week * 3, 15)  # Adds up to 15% for weekends
+
+        fill_level = min(95, max(5, base_fill_level + type_factor + day_factor))
+
+        # Last emptied between 0-10 days ago, correlated with fill level
+        # Fuller bins tend to have been emptied longer ago
+        days_corr = max(0, min(10, int(fill_level / 10)))
+        days_random = random.randint(-2, 2)  # Add some randomness
+        days_ago = max(0, min(10, days_corr + days_random))
+
+        bins.append(
+            {
+                "id": f"BIN-{len(bins):03d}",
+                "neighborhood": neighborhood,
+                "lat": lat,
+                "lon": lon,
+                "type": "Small Bin",
+                "bin_type": bin_type,
+                "waste_category": "General Waste"
+                if bin_type != "Recycling"
+                else "Mixed Recycling",
+                "fill_level": fill_level,
+                "status": "Open",  # All these bins are open by definition
+                "capacity_liters": capacity,
+                "last_emptied": f"{days_ago} days ago",
+            }
+        )
+
+    return pd.DataFrame(bins)
 
 
 def render_waste_type_legend(filtered_df, container):
@@ -140,6 +377,37 @@ def render_fill_level_legend(container):
         "<div style='display: flex; align-items: center;'>"
         "<div style='background-color: #FF0000; width: 15px; height: 15px; margin-right: 10px;'></div>"
         "High (75-100%) - Needs attention</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_open_bins_legend(container):
+    """Render legend for open waste bins"""
+    container.markdown("### Open Waste Bins Legend")
+    legend_cols = container.columns(4)
+
+    legend_cols[0].markdown(
+        "<div style='display: flex; align-items: center;'>"
+        "<div style='background-color: #0064FF; width: 15px; height: 15px; margin-right: 10px;'></div>"
+        "Standard</div>",
+        unsafe_allow_html=True,
+    )
+    legend_cols[1].markdown(
+        "<div style='display: flex; align-items: center;'>"
+        "<div style='background-color: #00B464; width: 15px; height: 15px; margin-right: 10px;'></div>"
+        "Recycling</div>",
+        unsafe_allow_html=True,
+    )
+    legend_cols[2].markdown(
+        "<div style='display: flex; align-items: center;'>"
+        "<div style='background-color: #FF6400; width: 15px; height: 15px; margin-right: 10px;'></div>"
+        "Cigarette</div>",
+        unsafe_allow_html=True,
+    )
+    legend_cols[3].markdown(
+        "<div style='display: flex; align-items: center;'>"
+        "<div style='background-color: #8000FF; width: 15px; height: 15px; margin-right: 10px;'></div>"
+        "Solar Compactor</div>",
         unsafe_allow_html=True,
     )
 
@@ -269,5 +537,58 @@ def create_map_layers(filtered_df, map_type):
         )
 
         return [layer]
+
+    elif map_type == "open_bins":
+        # Custom visualization for open waste bins with type-based colors
+        filtered_df["color"] = filtered_df["bin_type"].apply(
+            lambda x: {
+                "Standard": [0, 100, 255, 180],  # Blue for standard bins
+                "Recycling": [0, 180, 100, 180],  # Green for recycling bins
+                "Cigarette": [255, 100, 0, 180],  # Orange for cigarette bins
+                "Solar Compactor": [128, 0, 255, 180],  # Purple for solar compactors
+            }.get(x, [100, 100, 100, 180])  # Gray for unknown types
+        )
+
+        # Create bin icons with size based on capacity and fill level
+        filtered_df["radius"] = filtered_df.apply(
+            lambda row: max(
+                25,
+                min((row["capacity_liters"] / 2) * (0.8 + row["fill_level"] / 100), 80),
+            ),
+            axis=1,
+        )
+
+        # Small waste bin layer
+        bin_layer = pdk.Layer(
+            "ScatterplotLayer",
+            filtered_df,
+            get_position=["lon", "lat"],
+            get_color="color",
+            get_radius="radius",
+            pickable=True,
+            auto_highlight=True,
+            radiusMinPixels=5,
+            radiusMaxPixels=15,
+        )
+
+        # Add labels for bin types
+        text_layer = pdk.Layer(
+            "TextLayer",
+            filtered_df,
+            get_position=["lon", "lat"],
+            get_text="bin_type",
+            get_size=12,
+            get_color=[255, 255, 255],
+            get_angle=0,
+            get_text_anchor="middle",
+            get_alignment_baseline="center",
+            pickable=True,
+            sizeScale=0.6,
+            sizeUnits="pixels",
+            sizeMinPixels=8,
+            sizeMaxPixels=16,
+        )
+
+        return [bin_layer, text_layer]
 
     return []  # Default empty layers

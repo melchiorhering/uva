@@ -39,13 +39,21 @@ def render_map_controls(container_df):
     # Map type selector with improved descriptions
     map_type = st.radio(
         "Visualization Type",
-        ["critical_containers", "heatmap", "categories", "container_types", "pins"],
+        [
+            "critical_containers",
+            "heatmap",
+            "categories",
+            "container_types",
+            "pins",
+            "open_bins",
+        ],
         format_func=lambda x: {
             "critical_containers": "⚠️ Critical Containers (Need Emptying)",
             "heatmap": "🔥 Waste Hotspot Zones",
             "categories": "🗑️ Waste Problem Analysis",
             "container_types": "🚛 Container Distribution",
             "pins": "📍 All Container Locations",
+            "open_bins": "🗑️ Open Waste Bins",
         }[x],
         key="radio-selector",
     )
@@ -69,6 +77,10 @@ def render_map_controls(container_df):
         )
     elif map_type == "pins":
         st.info("Basic overview of all container locations")
+    elif map_type == "open_bins":
+        st.info(
+            "Shows smaller public waste bins that are currently open and available throughout the city"
+        )
 
     # Category filter with error handling
     try:

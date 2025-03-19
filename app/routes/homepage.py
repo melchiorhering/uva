@@ -6,10 +6,12 @@ from data.waste_data import (
     load_container_data,
     get_waste_trend_data,
 )
+
 from components.metrics import (
     render_top_metrics,
     render_container_fullness_metrics,
 )
+
 from components.charts import (
     render_waste_category_pie,
     render_neighborhood_containers_chart,
