@@ -384,7 +384,7 @@ def render_fill_level_legend(container):
 def render_open_bins_legend(container):
     """Render legend for open waste bins"""
     container.markdown("### Open Waste Bins Legend")
-    legend_cols = container.columns(4)
+    legend_cols = container.columns(5)  # Changed from 4 to 5 columns to include routes
 
     legend_cols[0].markdown(
         "<div style='display: flex; align-items: center;'>"
@@ -408,6 +408,12 @@ def render_open_bins_legend(container):
         "<div style='display: flex; align-items: center;'>"
         "<div style='background-color: #8000FF; width: 15px; height: 15px; margin-right: 10px;'></div>"
         "Solar Compactor</div>",
+        unsafe_allow_html=True,
+    )
+    legend_cols[4].markdown(
+        "<div style='display: flex; align-items: center;'>"
+        "<div style='border: 2px dashed #FFFFFF; width: 15px; height: 2px; margin-right: 10px;'></div>"
+        "Collection Routes</div>",
         unsafe_allow_html=True,
     )
 
@@ -589,6 +595,179 @@ def create_map_layers(filtered_df, map_type):
             sizeMaxPixels=16,
         )
 
+        # Generate optimized routes between bins
+        routes_df = generate_optimized_routes(filtered_df)
+
+        # If routes were successfully generated, add a path layer
+        if not routes_df.empty:
+            route_layer = pdk.Layer(
+                "PathLayer",
+                routes_df,
+                get_path="path",
+                get_color="color",
+                width_scale=15,
+                width_min_pixels=2,
+                width_max_pixels=5,
+                get_width=5,
+                pickable=True,
+                auto_highlight=True,
+                joint_rounded=True,
+                dash_size=10,
+                dash_gap=5,
+                get_dash_array=[10, 10],  # Creates a dashed line effect
+                highlight_color=[255, 255, 0, 128],  # Yellow highlight when clicked
+            )
+
+            # Add an icon at the start of each route to indicate the starting point
+            start_points = []
+            for path in routes_df["path"]:
+                if path and len(path) > 0:
+                    start_points.append({"position": path[0], "name": "Start"})
+
+            if start_points:
+                start_df = pd.DataFrame(start_points)
+                start_layer = pdk.Layer(
+                    "IconLayer",
+                    start_df,
+                    get_position="position",
+                    get_icon="name",
+                    get_size=5,
+                    size_scale=8,
+                    pickable=True,
+                    get_color=[255, 255, 0, 200],  # Yellow
+                    icon_atlas="https://raw.githubusercontent.com/visgl/deck.gl-data/master/website/icon-atlas.png",
+                    icon_mapping={
+                        "Start": {
+                            "x": 0,
+                            "y": 0,
+                            "width": 128,
+                            "height": 128,
+                            "mask": True,
+                        }
+                    },
+                )
+                return [route_layer, bin_layer, text_layer, start_layer]
+
+            return [route_layer, bin_layer, text_layer]
+
         return [bin_layer, text_layer]
 
     return []  # Default empty layers
+
+
+def generate_optimized_routes(bins_df, num_routes=5):
+    """Generate optimized collection routes between open waste bins"""
+    if len(bins_df) < 3:  # Need at least 3 bins for a meaningful route
+        return pd.DataFrame()
+
+    routes = []
+    route_ids = []
+    bins_by_type = {}
+
+    # Group bins by type for more realistic collection routes (different trucks for different waste types)
+    for bin_type in bins_df["bin_type"].unique():
+        bins_by_type[bin_type] = bins_df[bins_df["bin_type"] == bin_type]
+
+    # Process each bin type that has enough bins
+    route_counter = 0
+    for bin_type, type_bins in bins_by_type.items():
+        if len(type_bins) < 3:
+            continue
+
+        # Determine how many routes to create for this bin type
+        # More common types get more routes
+        routes_for_type = max(1, int(len(type_bins) / 15))  # Roughly 15 bins per route
+        routes_for_type = min(routes_for_type, num_routes - route_counter)
+
+        for r in range(routes_for_type):
+            if route_counter >= num_routes:
+                break
+
+            # Select a subset of bins for this route
+            sample_size = min(random.randint(5, 15), len(type_bins))
+            route_bins = type_bins.sample(sample_size)
+
+            # Sort bins by fill level (descending) to prioritize fuller bins
+            route_bins = route_bins.sort_values("fill_level", ascending=False)
+
+            # Start from a random bin weighted by fill level
+            weights = route_bins["fill_level"].values
+            start_idx = random.choices(range(len(route_bins)), weights=weights)[0]
+
+            # Nearest neighbor algorithm for route optimization
+            route_points = []
+            unvisited = set(range(len(route_bins)))
+            current = start_idx
+            route_points.append(
+                (route_bins.iloc[current]["lon"], route_bins.iloc[current]["lat"])
+            )
+            unvisited.remove(current)
+
+            # Find nearest neighbors
+            while unvisited:
+                current_lon = route_bins.iloc[current]["lon"]
+                current_lat = route_bins.iloc[current]["lat"]
+
+                # Calculate distances to all unvisited bins
+                min_dist = float("inf")
+                next_idx = None
+
+                for idx in unvisited:
+                    lon = route_bins.iloc[idx]["lon"]
+                    lat = route_bins.iloc[idx]["lat"]
+                    # Simple Euclidean distance (sufficient for our visualization purposes)
+                    dist = ((current_lon - lon) ** 2 + (current_lat - lat) ** 2) ** 0.5
+
+                    if dist < min_dist:
+                        min_dist = dist
+                        next_idx = idx
+
+                current = next_idx
+                route_points.append(
+                    (route_bins.iloc[current]["lon"], route_bins.iloc[current]["lat"])
+                )
+                unvisited.remove(current)
+
+            # Add a route color based on bin type
+            if bin_type == "Standard":
+                color = [0, 100, 255]  # Blue
+            elif bin_type == "Recycling":
+                color = [0, 180, 100]  # Green
+            elif bin_type == "Cigarette":
+                color = [255, 100, 0]  # Orange
+            elif bin_type == "Solar Compactor":
+                color = [128, 0, 255]  # Purple
+            else:
+                color = [100, 100, 100]  # Gray
+
+            routes.append(route_points)
+            route_ids.append(f"Route {route_counter + 1}: {bin_type}")
+            route_counter += 1
+
+    if not routes:
+        return pd.DataFrame()
+
+    # Create a DataFrame with route information
+    routes_df = pd.DataFrame(
+        {
+            "path": routes,
+            "name": route_ids,
+            "color": [get_color_for_route(rid) for rid in route_ids],
+        }
+    )
+
+    return routes_df
+
+
+def get_color_for_route(route_id):
+    """Get color for a route based on the bin type in the route name"""
+    if "Standard" in route_id:
+        return [0, 100, 255, 180]  # Blue for standard bins
+    elif "Recycling" in route_id:
+        return [0, 180, 100, 180]  # Green for recycling bins
+    elif "Cigarette" in route_id:
+        return [255, 100, 0, 180]  # Orange for cigarette bins
+    elif "Solar Compactor" in route_id:
+        return [128, 0, 255, 180]  # Purple for solar compactors
+    else:
+        return [100, 100, 100, 180]  # Gray for unknown types
