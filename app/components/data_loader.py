@@ -1,7 +1,11 @@
 import streamlit as st
 import os
 import datetime
-from data.waste_data import fetch_and_save_container_data, load_container_data, PROCESSED_DATA_PATH
+from data.waste_data import (
+    fetch_and_save_container_data,
+    load_container_data,
+    PROCESSED_DATA_PATH,
+)
 
 
 def data_management_ui():
@@ -12,7 +16,9 @@ def data_management_ui():
     if os.path.exists(PROCESSED_DATA_PATH):
         # Get file modification time
         mod_time = os.path.getmtime(PROCESSED_DATA_PATH)
-        mod_time_str = datetime.datetime.fromtimestamp(mod_time).strftime('%Y-%m-%d %H:%M:%S')
+        mod_time_str = datetime.datetime.fromtimestamp(mod_time).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
 
         st.info(f"Local container data available (last updated: {mod_time_str})")
 
@@ -29,7 +35,9 @@ def data_management_ui():
                 df = load_container_data()
                 if not df.empty:
                     st.write(f"Total containers: {len(df)}")
-                    st.write(f"Waste categories: {', '.join(df['waste_category'].unique())}")
+                    st.write(
+                        f"Waste categories: {', '.join(df['waste_category'].unique())}"
+                    )
                     st.write(f"Neighborhoods: {len(df['neighborhood'].unique())}")
 
     else:
@@ -39,5 +47,3 @@ def data_management_ui():
                 fetch_and_save_container_data()
                 st.success("Data fetched and saved successfully!")
                 st.rerun()
-```
-</file>

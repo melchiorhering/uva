@@ -102,3 +102,62 @@ def render_complaints_metric(complaints_df):
             active_complaints,
             f"{len(complaints_df[complaints_df['status'] == 'New'])} new",
         )
+
+
+def render_container_fullness_metrics(filtered_df):
+    """Display container fullness metrics with visual indicators"""
+    st.subheader("Container Fullness Status")
+
+    # Handle empty dataframe case
+    if filtered_df.empty:
+        st.info("No containers match the selected filters.")
+        return
+
+    # Calculate fullness metrics
+    critical_containers = len(filtered_df[filtered_df["fill_level"] >= 80])
+    warning_containers = len(
+        filtered_df[
+            (filtered_df["fill_level"] >= 60) & (filtered_df["fill_level"] < 80)
+        ]
+    )
+    ok_containers = len(filtered_df[filtered_df["fill_level"] < 60])
+    total = len(filtered_df)
+
+    # Create progress bars with proper colors
+    critical_percent = critical_containers / total * 100 if total > 0 else 0
+    warning_percent = warning_containers / total * 100 if total > 0 else 0
+    ok_percent = ok_containers / total * 100 if total > 0 else 0
+
+    # Display metrics without nested columns
+    st.markdown(
+        f"""
+    <div style="display: flex; justify-content: space-between; text-align: center; margin-bottom: 10px;">
+        <div style="flex: 1;">
+            <h3 style="color: red; margin: 0; font-size: 24px;">{critical_containers}</h3>
+            <p style="margin: 0;">Critical (80-100%)</p>
+        </div>
+        <div style="flex: 1;">
+            <h3 style="color: orange; margin: 0; font-size: 24px;">{warning_containers}</h3>
+            <p style="margin: 0;">Warning (60-80%)</p>
+        </div>
+        <div style="flex: 1;">
+            <h3 style="color: green; margin: 0; font-size: 24px;">{ok_containers}</h3>
+            <p style="margin: 0;">OK (0-60%)</p>
+        </div>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+    # Display percentage bars
+    st.progress(critical_percent / 100, "Critical")
+    st.progress(warning_percent / 100, "Warning")
+    st.progress(ok_percent / 100, "OK")
+
+    # Add insight text
+    if critical_percent > 20:
+        st.error(f"🚨 {critical_percent:.1f}% of containers need immediate attention!")
+    elif warning_percent > 30:
+        st.warning(f"⚠️ {warning_percent:.1f}% of containers filling up quickly")
+    else:
+        st.success("✅ Most containers have adequate capacity")

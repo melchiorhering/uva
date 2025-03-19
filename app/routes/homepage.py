@@ -1,25 +1,28 @@
 import streamlit as st
-
 from utils.helpers import load_css
 from data.waste_data import (
     generate_amsterdam_waste_data,
     fetch_and_save_container_data,
     load_container_data,
+    get_waste_trend_data,
 )
-from components.metrics import render_top_metrics
+from components.metrics import (
+    render_top_metrics,
+    render_container_fullness_metrics,
+)
 from components.charts import (
     render_waste_category_pie,
     render_neighborhood_containers_chart,
+    render_collection_efficiency_chart,
+    render_waste_trend_chart,
+    generate_waste_trend_data_from_containers,
 )
-
-
-from components.map import render_map_container, render_map_controls
+from components.map import render_map_container
+from components.controls import render_map_controls
 from components.tables import render_container_table, render_complaints_section
 
 # Set page config
-st.set_page_config(
-    layout="wide",
-)
+st.set_page_config(layout="wide")
 
 # Load CSS
 load_css("app.css")
@@ -33,21 +36,22 @@ def main():
     )
 
     # --- Dashboard Title ---
-    st.header(
-        "Amsterdam Waste Management Dashboard",
-    )
+    st.header("Amsterdam Waste Management Dashboard")
 
     # --- Top Row Metrics ---
     render_top_metrics(container_df, collection_df, complaints_df)
 
     # --- Top Row Charts ---
-    top_row = st.columns([1, 2])
+    top_row = st.columns([1, 1, 1])  # Three columns of equal width
 
     with top_row[0]:
         render_waste_category_pie(waste_by_category)
 
     with top_row[1]:
         render_neighborhood_containers_chart(neighborhood_df)
+
+    with top_row[2]:
+        render_collection_efficiency_chart(container_df)
 
     # --- Middle Section - Map and Controls ---
     middle_row = st.columns([2, 1])  # 2/3 for map, 1/3 for controls
@@ -82,12 +86,42 @@ def main():
     # Then render the map with the updated selections
     with middle_row[0]:
         # Render the map with current selections
-        render_map_container(
+        filtered_df = render_map_container(
             container_df,
             st.session_state.selected_waste_category,
             st.session_state.selected_neighborhood,
             st.session_state.map_type,
         )
+
+    # --- Container Status and Waste Trends section ---
+    st.markdown("---")
+    data_insights_row = st.columns(2)
+
+    with data_insights_row[0]:
+        st.markdown("### Container Status Overview")
+        if filtered_df is not None:
+            render_container_fullness_metrics(filtered_df)
+
+    with data_insights_row[1]:
+        st.markdown("### Waste Collection Trends")
+        # Check if we have real collection data in session state
+        if (
+            "collection_df" in st.session_state
+            and not st.session_state.collection_df.empty
+        ):
+            # Use real collection data from session state
+            collection_df = st.session_state.collection_df
+            # Get the trend data from the real collection data
+            daily_collection = get_waste_trend_data(collection_df)
+            st.caption("Showing real waste collection data")
+        else:
+            # No real collection data available, generate synthetic data based on containers
+            daily_collection = generate_waste_trend_data_from_containers(container_df)
+            st.caption(
+                "Showing estimated waste collection trends based on container data"
+            )
+
+        render_waste_trend_chart(daily_collection)
 
     # --- Bottom Section - Container Data Table and Complaints ---
     bottom_row = st.columns(2)  # 1/2 for table, 1/2 for notifications
