@@ -33,7 +33,7 @@ def render_map_controls(container_df):
     if container_df is None or container_df.empty:
         st.warning("No container data available. Some features may be limited.")
         container_df = pd.DataFrame(
-            columns=["id", "waste_category", "neighborhood", "fill_level", "type"]
+            columns=["id", "waste_category", "neighborhood", "fill_level"]
         )
 
     # Map type selector with improved descriptions
@@ -43,16 +43,12 @@ def render_map_controls(container_df):
             "critical_containers",
             "heatmap",
             "categories",
-            "container_types",
-            "pins",
             "open_bins",
         ],
         format_func=lambda x: {
             "critical_containers": "⚠️ Critical Containers (Need Emptying)",
             "heatmap": "🔥 Waste Hotspot Zones",
             "categories": "🗑️ Waste Problem Analysis",
-            "container_types": "🚛 Container Distribution",
-            "pins": "📍 All Container Locations",
             "open_bins": "🗑️ Open Waste Bins",
         }[x],
         key="radio-selector",
@@ -69,42 +65,61 @@ def render_map_controls(container_df):
         )
     elif map_type == "categories":
         st.info(
-            "Analyzes distribution of waste types - useful for identifying problem areas with specific waste"
+            "Color-coded analysis of waste types (Rest, Glass, Paper/Carton, etc.) - helps identify waste management patterns"
         )
-    elif map_type == "container_types":
-        st.info(
-            "Shows container distribution - helps identify areas that need more containers"
-        )
-    elif map_type == "pins":
-        st.info("Basic overview of all container locations")
     elif map_type == "open_bins":
         st.info(
             "Shows smaller public waste bins that are currently open and available throughout the city"
         )
 
-    # Category filter with error handling
-    try:
-        categories = ["All Categories"]
+    # Create two columns for waste category and neighborhood selection
+    filter_cols = st.columns(2)
+
+    # Waste Category Selection - simplified to a single selectbox with a nice header
+    with filter_cols[0]:
+        st.markdown("### 🗑️ Waste Category")
+
+        # Get waste categories from data
+        waste_categories = []
         if not container_df.empty and "waste_category" in container_df.columns:
-            categories += sorted(list(container_df["waste_category"].unique()))
+            waste_categories = list(container_df["waste_category"].unique())
+
+        # Default categories if data is not available
+        if not waste_categories:
+            waste_categories = [
+                "Rest",
+                "Glass",
+                "Paper/Carton",
+                "Plastic",
+                "Organic",
+                "Textiles",
+            ]
+
+        # Single selectbox for all waste categories
         selected_waste_category = st.selectbox(
-            "Filter by Waste Category", categories, key="waste-category-selector"
+            "Select waste category",
+            ["All Categories"] + waste_categories,
+            key="waste-category-selector",
+            # Add custom CSS to make it more prominent
+            help="Filter containers by waste type",
         )
-    except Exception:
-        selected_waste_category = "All Categories"
-        st.warning("Error loading waste categories")
 
     # Neighborhood filter with error handling
-    try:
-        neighborhoods = ["All Neighborhoods"]
-        if not container_df.empty and "neighborhood" in container_df.columns:
-            neighborhoods += sorted(list(container_df["neighborhood"].unique()))
-        selected_neighborhood = st.selectbox(
-            "Filter by Neighborhood", neighborhoods, key="neighborhood-selector"
-        )
-    except Exception:
-        selected_neighborhood = "All Neighborhoods"
-        st.warning("Error loading neighborhoods")
+    with filter_cols[1]:
+        st.markdown("### 📍 Neighborhood")
+        try:
+            neighborhoods = ["All Neighborhoods"]
+            if not container_df.empty and "neighborhood" in container_df.columns:
+                neighborhoods += sorted(list(container_df["neighborhood"].unique()))
+            selected_neighborhood = st.selectbox(
+                "Select neighborhood",
+                neighborhoods,
+                key="neighborhood-selector",
+                help="Filter containers by neighborhood",
+            )
+        except Exception:
+            selected_neighborhood = "All Neighborhoods"
+            st.warning("Error loading neighborhoods")
 
     # Show data summary if data is available
     if not container_df.empty:
@@ -114,11 +129,13 @@ def render_map_controls(container_df):
                 st.write(
                     f"Unique waste types: {len(container_df['waste_category'].unique())}"
                 )
-            if "type" in container_df.columns:
-                st.write(
-                    f"Unique container types: {len(container_df['type'].unique())}"
-                )
             if "neighborhood" in container_df.columns:
                 st.write(f"Neighborhoods: {len(container_df['neighborhood'].unique())}")
+
+            # Add waste category distribution as a horizontal bar chart
+            if "waste_category" in container_df.columns:
+                st.subheader("Waste Category Distribution")
+                category_counts = container_df["waste_category"].value_counts()
+                st.bar_chart(category_counts)
 
     return map_type, selected_waste_category, selected_neighborhood

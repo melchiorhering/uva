@@ -156,22 +156,21 @@ def parse_geojson(geojson_data):
     """Extract relevant fields from GeoJSON and augment with mock data where needed"""
     containers = []
 
-    # Map common container types from Amsterdam data
+    # Map common container types from Amsterdam data - updated to match actual values
     container_type_mapping = {
-        "Restafval": "General Waste",
+        "Rest": "Rest",
         "Papier": "Paper/Carton",
         "Glas": "Glass",
         "Plastic": "Plastic",
         "GFT": "Organic",
         "Textiel": "Textiles",
-    }
-
-    # Create map of container types to determine visualization colors
-    container_colors = {
-        "Ondergrondse container": "Underground Container",
-        "Mini container": "Mini Container",
-        "Verzamelcontainer": "Collection Container",
-        "Container": "Standard Container",
+        "Restafval": "Rest",
+        "Restafval ondergronds": "Rest",
+        "Plastic afval": "Plastic",
+        "Groente fruit en tuinafval": "Organic",
+        "Textielcontainer": "Textiles",
+        "Glas-gemengd": "Glass",
+        "Karton/papier": "Paper/Carton",
     }
 
     # Define neighborhoods with "recently emptied" containers (lower fill levels)
@@ -188,14 +187,10 @@ def parse_geojson(geojson_data):
         coords = feature["geometry"]["coordinates"]
 
         # Get waste type from Amsterdam data or default
+        # First check 'fractie_omschrijving', fall back to other fields if needed
         waste_category = props.get("fractie_omschrijving", "Unknown")
         if waste_category in container_type_mapping:
             waste_category = container_type_mapping[waste_category]
-
-        # Determine container type
-        container_type = props.get("type_name", "Unknown")
-        if container_type in container_colors:
-            container_type = container_colors[container_type]
 
         # Container ID - use actual ID or generate one
         container_id = props.get("id", f"AMS-{len(containers):04d}")
@@ -252,15 +247,8 @@ def parse_geojson(geojson_data):
         days_ago = int((fill_level / 100) * 14)  # 0% = just emptied, 100% = 14 days
         last_emptied = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
 
-        # Determine capacity based on container type
-        capacity_kg = 500  # default
-        if (
-            "ondergronds" in str(container_type).lower()
-            or "underground" in str(container_type).lower()
-        ):
-            capacity_kg = 800
-        elif "mini" in str(container_type).lower():
-            capacity_kg = 200
+        # Determine capacity based on container type (default value)
+        capacity_kg = 500
 
         containers.append(
             {
@@ -268,7 +256,6 @@ def parse_geojson(geojson_data):
                 "neighborhood": neighborhood,
                 "lat": coords[1],  # Ensure correct order (lat, lon)
                 "lon": coords[0],
-                "type": container_type,
                 "waste_category": waste_category,
                 "fill_level": fill_level,
                 "status": status,
@@ -501,23 +488,11 @@ def get_waste_trend_data(collection_df, days=10):
     ]
 
 
-# Add support for getting container type colors
-def get_container_type_colors():
-    """Return mapping of container types to colors"""
-    return {
-        "Underground Container": [50, 50, 150],
-        "Mini Container": [150, 50, 50],
-        "Collection Container": [50, 150, 50],
-        "Standard Container": [150, 150, 50],
-        "Smart Bin": [150, 50, 150],
-        "Unknown": [100, 100, 100],
-    }
-
-
 def get_waste_type_colors():
     """Return mapping of waste types to colors"""
     return {
         "Recycling": [46, 139, 87],
+        "Rest": [128, 128, 128],
         "General Waste": [128, 128, 128],
         "Paper/Carton": [70, 130, 180],
         "Glass": [0, 128, 128],

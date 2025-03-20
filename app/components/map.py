@@ -7,7 +7,6 @@ from data.waste_data import (
     load_container_data,
     fetch_and_save_container_data,
     filter_container_data,
-    get_container_type_colors,
     get_waste_type_colors,
 )
 
@@ -74,7 +73,7 @@ def render_map_container(
         tooltip={
             "text": "{id}\nType: {bin_type}\nWaste: {waste_category}\nFill: {fill_level}%\nStatus: {status}\nCapacity: {capacity_liters} liters\nLast emptied: {last_emptied}"
             if map_type == "open_bins"
-            else "{id}\nType: {type}\nWaste: {waste_category}\nFill: {fill_level}%\nStatus: {status}"
+            else "{id}\nWaste: {waste_category}\nFill: {fill_level}%\nStatus: {status}\nLast Emptied: {last_emptied}"
         },
     )
 
@@ -85,8 +84,6 @@ def render_map_container(
     # Add legends directly in the main container instead of sidebar
     if map_type == "categories":
         render_waste_type_legend(filtered_df, map_container)
-    elif map_type == "container_types":
-        render_container_type_legend(filtered_df, map_container)
     elif map_type == "fill_level" or map_type == "critical_containers":
         render_fill_level_legend(map_container)
     elif map_type == "open_bins":
@@ -337,25 +334,6 @@ def render_waste_type_legend(filtered_df, container):
             i += 1
 
 
-def render_container_type_legend(filtered_df, container):
-    """Render container type legend in the specified container"""
-    container_colors = get_container_type_colors()
-    container.markdown("### Container Type Legend")
-    legend_cols = container.columns(5)  # Organize legend into 5 columns
-
-    i = 0
-    for container_type, color in container_colors.items():
-        if container_type != "Unknown" and any(filtered_df["type"] == container_type):
-            color_hex = "#{:02x}{:02x}{:02x}".format(color[0], color[1], color[2])
-            legend_cols[i % 5].markdown(
-                f"<div style='display: flex; align-items: center;'>"
-                f"<div style='background-color: {color_hex}; width: 15px; height: 15px; margin-right: 10px;'></div>"
-                f"{container_type}</div>",
-                unsafe_allow_html=True,
-            )
-            i += 1
-
-
 def render_fill_level_legend(container):
     """Render fill level legend in the specified container"""
     container.markdown("### Fill Level Legend")
@@ -420,54 +398,7 @@ def render_open_bins_legend(container):
 
 def create_map_layers(filtered_df, map_type):
     """Create map layers based on selected visualization type"""
-    if map_type == "pins":
-        # Add a custom icon layer for waste containers
-        layer = pdk.Layer(
-            "ScatterplotLayer",
-            filtered_df,
-            get_position=["lon", "lat"],
-            get_fill_color=[180, 0, 200, 140],  # Set an RGBA value for fill
-            get_radius=100,  # Fixed size for all points
-            pickable=True,
-            auto_highlight=True,
-            radiusMinPixels=5,
-            radiusMaxPixels=15,
-        )
-
-        # Add a text layer for container IDs
-        text_layer = pdk.Layer(
-            "TextLayer",
-            filtered_df,
-            get_position=["lon", "lat"],
-            get_text="id",
-            get_size=12,
-            get_color=[0, 0, 0],
-            get_angle=0,
-            get_text_anchor="middle",
-            get_alignment_baseline="bottom",
-            pickable=True,
-            sizeScale=0.8,
-            sizeUnits="pixels",
-            sizeMinPixels=10,
-            sizeMaxPixels=25,
-        )
-
-        return [layer, text_layer]
-
-    elif map_type == "heatmap":
-        # Heatmap layer based on fill level
-        layer = pdk.Layer(
-            "HeatmapLayer",
-            filtered_df,
-            get_position=["lon", "lat"],
-            get_weight="fill_level",
-            opacity=0.8,
-            pickable=False,
-            aggregation="SUM",
-        )
-        return [layer]
-
-    elif map_type == "categories":
+    if map_type == "categories":
         # Custom point layer with colors based on waste category
         waste_colors = get_waste_type_colors()
         filtered_df["color"] = filtered_df["waste_category"].apply(
@@ -486,30 +417,40 @@ def create_map_layers(filtered_df, map_type):
             radiusMaxPixels=15,
         )
 
-        return [layer]
-
-    elif map_type == "container_types":
-        # Custom point layer with colors based on container type
-        container_colors = get_container_type_colors()
-        filtered_df["color"] = filtered_df["type"].apply(
-            lambda x: container_colors.get(x, container_colors["Unknown"])
-        )
-
-        layer = pdk.Layer(
-            "ScatterplotLayer",
+        # Add a text layer to show waste type for better clarity
+        text_layer = pdk.Layer(
+            "TextLayer",
             filtered_df,
             get_position=["lon", "lat"],
-            get_color="color",
-            get_radius=100,
+            get_text="waste_category",
+            get_size=12,
+            get_color=[0, 0, 0],
+            get_angle=0,
+            get_text_anchor="middle",
+            get_alignment_baseline="bottom",
             pickable=True,
-            auto_highlight=True,
-            radiusMinPixels=5,
-            radiusMaxPixels=15,
+            sizeScale=0.6,
+            sizeUnits="pixels",
+            sizeMinPixels=8,
+            sizeMaxPixels=16,
         )
 
+        return [layer, text_layer]
+
+    elif map_type == "heatmap":
+        # Heatmap layer based on fill level
+        layer = pdk.Layer(
+            "HeatmapLayer",
+            filtered_df,
+            get_position=["lon", "lat"],
+            get_weight="fill_level",
+            opacity=0.8,
+            pickable=False,
+            aggregation="SUM",
+        )
         return [layer]
 
-    elif map_type == "fill_level" or map_type == "critical_containers":
+    elif map_type == "critical_containers" or map_type == "fill_level":
         # Enhanced 3D columns showing fill level with improved color scheme for hotspot identification
         filtered_df["height"] = (
             filtered_df["fill_level"] * 10
